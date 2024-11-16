@@ -161,6 +161,19 @@ def display_teams(teams: List[List[Participant]]):
             print(f"    - Dietary Restrictions: {member.dietary_restrictions}\n")
         print()
 
+def reduced_display_teams_limit(teams: List[List[Participant]],number):
+    for i, team in enumerate(teams, 1):
+        if len(team) == number:
+            print(f"\n[bold]Team {i}[/bold]:")
+            for member in team:
+                print(f"  - [bold]{member.name}[/bold] (Preferred Team Size: {member.preferred_team_size}", end = " ")
+
+def reduced_display_teams(teams: List[List[Participant]]):
+    for i, team in enumerate(teams, 1):
+        print(f"\n[bold]Team {i}[/bold]:")
+        for member in team:
+            print(f"  - [bold]{member.name}[/bold]", end = " ")
+
 
 
 def create_friend_groups(participants: List[Participant]) -> List[List[Participant]]:
@@ -197,7 +210,28 @@ def create_friend_groups(participants: List[Participant]) -> List[List[Participa
     # Return the friend groups and the remaining participants
     return friend_groups, remaining_participants
 
-
+def validate_groups(participants: List[Participant], all_groups: List[List[Participant]]):
+    # Step 1: Flatten the list of groups and extract all participants
+    all_participants_in_groups = [member for group in all_groups for member in group]
+    
+    # Step 2: Check for duplicates
+    participants_set = set(participants)  # Create a set of all participants for comparison
+    all_participants_in_groups_set = set(all_participants_in_groups)  # Set of all participants in groups
+    
+    if len(all_participants_in_groups) != len(all_participants_in_groups_set):
+        print("There are duplicate participants in the groups!")
+        return False
+    
+    # Step 3: Check if any participant is missing from the groups
+    if participants_set != all_participants_in_groups_set:
+        print("Some participants are missing from the groups!")
+        missing_participants = participants_set - all_participants_in_groups_set
+        print(f"Missing participants: {missing_participants}")
+        return False
+    
+    # If all checks pass
+    print("\nAll participants are correctly grouped and unique.")
+    return True
 
 # Main execution
 if __name__ == "__main__":
@@ -222,6 +256,9 @@ if __name__ == "__main__":
     balanced_teams = create_balanced_teams(remaining_participants, TEAM_SIZE)
 
     all_groups = friend_groups + balanced_teams
-    display_teams(all_groups)
+    
+    reduced_display_teams(all_groups)
+
+    validate_groups(participants,all_groups)
 
 

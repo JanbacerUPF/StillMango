@@ -42,6 +42,14 @@ class Participant:
     future_excitement: str
     fun_fact: str
 
+    def __eq__(self, other):
+        # Check if two Participants are equal based on their unique id
+        return isinstance(other, Participant) and self.id == other.id
+
+    def __hash__(self):
+        # Return a hash based on the participant's unique id
+        return hash(self.id)
+
 
 def load_participants(path: str) -> List[Participant]:
     if not pathlib.Path(path).exists():
