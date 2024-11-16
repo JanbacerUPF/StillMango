@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Literal
 
 
+
 @dataclass
 class Participant:
     id: uuid.UUID  # Unique identifier
