@@ -19,6 +19,49 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 # Ensure stdout uses UTF-8
 sys.stdout.reconfigure(encoding="utf-8")
 
+#check if programing_skills is valid (1-5)
+def fix_programming_language(participants: list) -> None:
+    for participant in participants:
+        for skill, level in participant.programing_skills.items():
+            if level > 5:
+                participant.programming_skills[skill] = 5
+
+# compute a score based on compatibility
+def compatibility_score(participant1: Participant, participant2: Participant) -> int:
+    score = 0
+
+    # Shared skills
+    shared_skills = set(participant1.programming_skills.keys()) & set(participant2.programming_skills.keys())
+    score += 4*sum(
+        min(participant1.programming_skills[skill], participant2.programming_skills[skill])
+        for skill in shared_skills
+    )
+
+    # Shared availability
+    shared_availability = sum(
+        participant1.availability[time] and participant2.availability[time]
+        for time in participant1.availability
+    )
+    score += 7*shared_availability
+
+    # Shared experience or different but higher doesnt want to win
+    if (participant1.experience_level == participant2.experience_level):
+        score += 20
+    elif (participant1.experience_level > participant2.experience_level and categorize_objective(participant1.objective) != "prize-hunting"):
+        score += 17
+
+
+    # Different role
+    if (participant1.preferred_role != participant2.preferred_role):
+        score += 26
+
+    # Hackathons done
+    score += 5*(min(participant1.hackathons_done, participant2.hackathons_done))
+    
+
+    return score
+
+
 def create_language_groups_by_rarity(participants: List[Participant]) -> List[List[Participant]]:
     # Count the rarity of each language
     language_counts = Counter(
@@ -132,6 +175,59 @@ def create_objective_subgroups(language_groups: List[List[Participant]]) -> List
     return objective_subgroups
 
 
+
+def create_balanced_teams(participants: List[List[Participant]], team_size: int) -> List[List[Participant]]:
+    # Helper function to build teams based on preferences
+    def build_teams_from_group(preference_group: List[Participant], max_team_size: int):
+        teams = []
+        while preference_group:
+            team = []
+            for _ in range(max_team_size):
+                if preference_group:
+                    team.append(preference_group.pop())
+            teams.append(team)
+        return teams
+
+    teams = []
+
+    for group in participants:
+        preferred_sizes = {1: [], 2: [], 3: [], 4: [], 0: []}
+        for participant in group:
+            preferred_sizes[participant.preferred_team_size].append(participant)
+
+        # First, build teams for those who prefer size 4, then 3, 2, and 1
+        for size in [4, 3, 2, 1]:
+            teams.extend(build_teams_from_group(preferred_sizes[size], size))
+
+        # Now, handle people with preference 0 by grouping them to maximize team preference matches
+        all_remaining = preferred_sizes[0] + preferred_sizes[1] + preferred_sizes[2] + preferred_sizes[3]
+        teams.extend(build_teams_from_group(all_remaining, 3))  # Default to 3 people for optimization
+
+    # Identify single-member teams where the team size does not match the participant's preference
+    single_member_teams = [team for team in teams if len(team) == 1]
+    remaining_participants = [team[0] for team in single_member_teams]
+
+    # Remove single-member teams from the main teams list
+    teams = [team for team in teams if len(team) > 1]
+
+    # Group remaining participants by their preferred team sizes
+    preference_groups = defaultdict(list)
+    for participant in remaining_participants:
+        preference_groups[participant.preferred_team_size].append(participant)
+
+    # Regroup participants respecting their preferences
+    for size in [4, 3, 2, 1]:
+        if size in preference_groups:
+            teams.extend(build_teams_from_group(preference_groups[size], size))
+
+    # Handle any leftover participants who couldn't form their preferred team size
+    if preference_groups[0]:
+        teams.extend(build_teams_from_group(preference_groups[0], team_size))
+
+    return teams
+ 
+
+"""
 # Create balanced teams
 def create_balanced_teams(participants: List[List[Participant]], team_size: int) -> List[List[Participant]]:
     # Separate participants based on preferred team sizes, ensuring a group for preference 0
@@ -162,7 +258,7 @@ def create_balanced_teams(participants: List[List[Participant]], team_size: int)
     teams.extend(build_teams_from_group(all_remaining, 3))  # Default to 3 people for optimization
     
     return teams
-
+"""
 def create_teams(participants: List[Participant], team_size: int) -> List[List[Participant]]:
 
     # Create friend groups and remove the used participants from the list
@@ -207,7 +303,6 @@ def reduced_display_teams_limit(teams: List[List[Participant]],number):
 def reduced_display_teams(teams: List[List[Participant]]):
     for i, team in enumerate(teams, 1):
         print(f"\n[bold]Team {i}[/bold]:")
-        print(categorize_objective(team[0].objective))
         for member in team:
             print(f"  - [bold]{member.name}[/bold]", end = " ")
 
@@ -298,7 +393,7 @@ if __name__ == "__main__":
 
     all_groups = create_teams(participants, TEAM_SIZE)
     
-    reduced_display_teams(all_groups)
+    reduced_display_teams_limit(all_groups,2)
 
     validate_groups(participants,all_groups)
 
