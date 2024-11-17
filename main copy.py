@@ -178,14 +178,25 @@ def create_objective_subgroups(language_groups: List[List[Participant]]) -> List
 
 def create_balanced_teams(participants: List[List[Participant]], team_size: int) -> List[List[Participant]]:
     # Helper function to build teams based on preferences
-    def build_teams_from_group(preference_group: List[Participant], max_team_size: int):
+    def build_teams_from_group(preference_group: List[Participant], max_team_size: int) -> List[List[Participant]]:
         teams = []
+        
         while preference_group:
             team = []
-            for _ in range(max_team_size):
+            current_participant = preference_group.pop()  # Start with a random participant
+            team.append(current_participant)
+            
+            # Sort the remaining participants by compatibility score with the current participant (in descending order)
+            preference_group.sort(key=lambda p: compatibility_score(current_participant, p), reverse=True)
+            
+            # Add the best candidates to the team, ensuring no participant is added more than once
+            for _ in range(max_team_size - 1):  # Already added one participant
                 if preference_group:
-                    team.append(preference_group.pop())
+                    best_candidate = preference_group.pop(0)  # Get the best candidate (highest compatibility)
+                    team.append(best_candidate)
+            
             teams.append(team)
+        
         return teams
 
     teams = []
@@ -226,39 +237,6 @@ def create_balanced_teams(participants: List[List[Participant]], team_size: int)
 
     return teams
  
-
-"""
-# Create balanced teams
-def create_balanced_teams(participants: List[List[Participant]], team_size: int) -> List[List[Participant]]:
-    # Separate participants based on preferred team sizes, ensuring a group for preference 0
-    preferred_sizes = {1: [], 2: [], 3: [], 4: [], 0: []}  # Include 0 for those with no preference
-    for team in participants:
-        for participant in team:
-            preferred_sizes[participant.preferred_team_size].append(participant)
-
-    # Helper function to build teams based on preferences
-    def build_teams_from_group(preference_group: List[Participant], max_team_size: int):
-        teams = []
-        while preference_group:
-            team = []
-            for _ in range(max_team_size):
-                if preference_group:
-                    team.append(preference_group.pop())
-            teams.append(team)
-        return teams
-
-    teams = []
-    
-    # First, build teams for those who prefer size 4, then 3, 2, and 1
-    for size in [4, 3, 2, 1]:
-        teams.extend(build_teams_from_group(preferred_sizes[size], size))
-
-    # Now, handle people with preference 0 by grouping them to maximize team preference matches
-    all_remaining = preferred_sizes[0] + preferred_sizes[1] + preferred_sizes[2] + preferred_sizes[3]
-    teams.extend(build_teams_from_group(all_remaining, 3))  # Default to 3 people for optimization
-    
-    return teams
-"""
 def create_teams(participants: List[Participant], team_size: int) -> List[List[Participant]]:
 
     # Create friend groups and remove the used participants from the list
@@ -303,6 +281,7 @@ def reduced_display_teams_limit(teams: List[List[Participant]],number):
 def reduced_display_teams(teams: List[List[Participant]]):
     for i, team in enumerate(teams, 1):
         print(f"\n[bold]Team {i}[/bold]:")
+        
         for member in team:
             print(f"  - [bold]{member.name}[/bold]", end = " ")
 
@@ -393,7 +372,7 @@ if __name__ == "__main__":
 
     all_groups = create_teams(participants, TEAM_SIZE)
     
-    reduced_display_teams_limit(all_groups,2)
+    reduced_display_teams(all_groups)
 
     validate_groups(participants,all_groups)
 
