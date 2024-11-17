@@ -10,6 +10,7 @@ from participant import load_participants
 import sys
 import os
 from collections import defaultdict
+from collections import Counter
 
 
 # Set the environment variable for UTF-8 support
@@ -18,107 +19,126 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 # Ensure stdout uses UTF-8
 sys.stdout.reconfigure(encoding="utf-8")
 
-
-"""
-# Compatibility scoring function
-def compatibility_score(participant1: Participant, participant2: Participant) -> int:
-    score = 0
-
-    # Shared languages
-    shared_languages = set(participant1.preferred_languages) & set(participant2.preferred_languages)
-    score += len(shared_languages)
-
-    # Shared interests
-    shared_interests = set(participant1.interests) & set(participant2.interests)
-    score += len(shared_interests)
-
-    # Shared skills
-    shared_skills = set(participant1.programming_skills.keys()) & set(participant2.programming_skills.keys())
-    score += sum(
-        min(participant1.programming_skills[skill], participant2.programming_skills[skill])
-        for skill in shared_skills
+def create_language_groups_by_rarity(participants: List[Participant]) -> List[List[Participant]]:
+    # Count the rarity of each language
+    language_counts = Counter(
+        language
+        for participant in participants
+        for language in participant.preferred_languages
     )
+    
+    # Sort languages by rarity (ascending order)
+    sorted_languages = sorted(language_counts, key=language_counts.get)
 
-    # Shared availability
-    shared_availability = sum(
-        participant1.availability[time] and participant2.availability[time]
-        for time in participant1.availability
-    )
-    score += shared_availability
+    language_groups = []
+    used_participants = set()
 
-    # Objective similarity (non-empty comparison)
-    if participant1.objective and participant2.objective:
-        score += 1
+    # Create groups starting with the rarest language
+    for language in sorted_languages:
+        group = []
+        for participant in participants:
+            if participant not in used_participants and language in participant.preferred_languages:
+                group.append(participant)
+                used_participants.add(participant)
+        
+        # Add the group if not empty
+        if group:
+            language_groups.append(group)
+    
+    # Handle participants without languages
+    no_language_group = [
+        participant for participant in participants if participant not in used_participants
+    ]
+    if no_language_group:
+        language_groups.append(no_language_group)
 
-    return score
+    return language_groups
+
+    
 
 
-# Filtering functions based on keywords (Objective, Interests, Preferred Role)
-def filter_objective(objective: str) -> str:
+def categorize_objective(objective: str) -> str:
     # Keywords for different objectives
-    win_keywords = ['win', 'first prize', 'trophy', 'compete', 'victory']
-    learn_keywords = ['learn', 'first time', 'new skills', 'develop', 'experience', 'improve']
-    meet_keywords = ['meet', 'network', 'collaborate', 'make friends', 'community']
+    win_keywords = ['win', 'winning', 'victory', 'prize', 'trophy', 'competition', 'compete', 
+                    'champion', 'beat others', 'best', 'success', 'first place', 'achieve']
+    learn_keywords = ['learn', 'learning', 'develop', 'improve', 'skills', 'experience', 
+                      'new knowledge', 'practice', 'try new things', 'experiment', 
+                      'understand', 'educate', 'growth']
+    meet_keywords = ['meet', 'network', 'collaborate', 'connect', 'team up', 'friends', 
+                     'make connections', 'community', 'share ideas', 'partner', 'engage', 
+                     'interact','blast','buddies']
+    negation_words = ['not', "don't", 'never', 'no']
 
-    # Check for matching keywords and return the category
+    # Normalize the objective to lowercase for matching
     objective = objective.lower()
-    if any(keyword in objective for keyword in win_keywords):
-        return "prize-hunting"
-    elif any(keyword in objective for keyword in learn_keywords):
-        return "learning new skills"
-    elif any(keyword in objective for keyword in meet_keywords):
-        return "meeting new people"
-    else:
-        return "other"
+
+    # Check for negations
+    def is_negated(keyword: str, text: str) -> bool:
+        words = text.split()
+        if keyword in words:
+            keyword_index = words.index(keyword)
+            # Check for negation words within a 3-word range before the keyword
+            for i in range(max(0, keyword_index - 3), keyword_index):
+                if words[i] in negation_words:
+                    return True
+        return False
+
+    # Check for each category while avoiding negations
+    for keyword in win_keywords:
+        if keyword in objective and not is_negated(keyword, objective):
+            return "prize-hunting"
+    for keyword in learn_keywords:
+        if keyword in objective and not is_negated(keyword, objective):
+            return "learning new skills"
+    for keyword in meet_keywords:
+        if keyword in objective and not is_negated(keyword, objective):
+            return "meeting new people"
+
+    return "other"
 
 
-def filter_interests(interests: List[str]) -> List[str]:
-    # Keywords for common interest categories
-    tech_interests = ['AI', 'machine learning', 'data science', 'programming', 'development']
-    design_interests = ['design', 'UI/UX', 'product design', 'web design']
-    business_interests = ['business', 'finance', 'startup', 'marketing']
+def create_objective_subgroups(language_groups: List[List[Participant]]) -> List[List[Participant]]:
+    objective_subgroups = []
 
-    # Categorize based on interest matches
-    categorized_interests = []
-    for interest in interests:
-        if any(keyword in interest.lower() for keyword in tech_interests):
-            categorized_interests.append('Tech')
-        elif any(keyword in interest.lower() for keyword in design_interests):
-            categorized_interests.append('Design')
-        elif any(keyword in interest.lower() for keyword in business_interests):
-            categorized_interests.append('Business')
-        else:
-            categorized_interests.append('Other')
+    # Process each language group
+    for group in language_groups:
+        # Subgroups for each objective
+        prize_hunting_group = []
+        learning_group = []
+        meeting_group = []
+        other_group = []
 
-    return categorized_interests
+        for participant in group:
+            category = categorize_objective(participant.objective)
+            if category == "prize-hunting":
+                prize_hunting_group.append(participant)
+            elif category == "learning new skills":
+                learning_group.append(participant)
+            elif category == "meeting new people":
+                meeting_group.append(participant)
+            else:
+                other_group.append(participant)
+        
+        # Add non-empty subgroups to the result
+        if prize_hunting_group:
+            objective_subgroups.append(prize_hunting_group)
+        if learning_group:
+            objective_subgroups.append(learning_group)
+        if meeting_group:
+            objective_subgroups.append(meeting_group)
+        if other_group:
+            objective_subgroups.append(other_group)
 
+    return objective_subgroups
 
-def filter_preferred_role(preferred_role: str) -> str:
-    # Define role categories and keywords
-    development_roles = ['development', 'developer', 'coding', 'programming']
-    design_roles = ['design', 'designer', 'UI/UX', 'graphic design']
-    analysis_roles = ['analysis', 'analyst', 'data analysis', 'data science']
-    visualization_roles = ['visualization', 'visual', 'dashboard', 'graphics']
-
-    # Match preferred roles to categories
-    if any(keyword in preferred_role.lower() for keyword in development_roles):
-        return "Development"
-    elif any(keyword in preferred_role.lower() for keyword in design_roles):
-        return "Design"
-    elif any(keyword in preferred_role.lower() for keyword in analysis_roles):
-        return "Analysis"
-    elif any(keyword in preferred_role.lower() for keyword in visualization_roles):
-        return "Visualization"
-    else:
-        return "Other"
-"""
 
 # Create balanced teams
-def create_balanced_teams(participants: List[Participant], team_size: int) -> List[List[Participant]]:
+def create_balanced_teams(participants: List[List[Participant]], team_size: int) -> List[List[Participant]]:
     # Separate participants based on preferred team sizes, ensuring a group for preference 0
     preferred_sizes = {1: [], 2: [], 3: [], 4: [], 0: []}  # Include 0 for those with no preference
-    for participant in participants:
-        preferred_sizes[participant.preferred_team_size].append(participant)
+    for team in participants:
+        for participant in team:
+            preferred_sizes[participant.preferred_team_size].append(participant)
 
     # Helper function to build teams based on preferences
     def build_teams_from_group(preference_group: List[Participant], max_team_size: int):
@@ -141,6 +161,22 @@ def create_balanced_teams(participants: List[Participant], team_size: int) -> Li
     all_remaining = preferred_sizes[0] + preferred_sizes[1] + preferred_sizes[2] + preferred_sizes[3]
     teams.extend(build_teams_from_group(all_remaining, 3))  # Default to 3 people for optimization
     
+    return teams
+
+def create_teams(participants: List[Participant], team_size: int) -> List[List[Participant]]:
+
+    # Create friend groups and remove the used participants from the list
+    friend_groups, remaining_participants = create_friend_groups(participants)
+
+    groups=create_language_groups_by_rarity(remaining_participants)
+
+    groups = create_objective_subgroups(groups)
+
+    groups=create_balanced_teams(groups,4)
+
+
+    teams = friend_groups+groups
+
     return teams
 
 
@@ -171,6 +207,7 @@ def reduced_display_teams_limit(teams: List[List[Participant]],number):
 def reduced_display_teams(teams: List[List[Participant]]):
     for i, team in enumerate(teams, 1):
         print(f"\n[bold]Team {i}[/bold]:")
+        print(categorize_objective(team[0].objective))
         for member in team:
             print(f"  - [bold]{member.name}[/bold]", end = " ")
 
@@ -226,7 +263,8 @@ def validate_groups(participants: List[Participant], all_groups: List[List[Parti
     if participants_set != all_participants_in_groups_set:
         print("Some participants are missing from the groups!")
         missing_participants = participants_set - all_participants_in_groups_set
-        print(f"Missing participants: {missing_participants}")
+        for member in missing_participants:
+            print(f"Missing participants: {member.name}")
         return False
     
     # If all checks pass
@@ -239,7 +277,7 @@ if __name__ == "__main__":
     data_path = "data/datathon_participants.json"
     participants = load_participants(data_path)
 
-    # Create friend groups and remove the used participants from the list
+    """# Create friend groups and remove the used participants from the list
     friend_groups, remaining_participants = create_friend_groups(participants)
 
     # Display the friend groups
@@ -248,14 +286,17 @@ if __name__ == "__main__":
         print(f"Friend Group {i}:")
         for member in group:
             print(f"  - {member.name} (ID: {member.id})")
+    """
 
     # Set team size for balanced teams
     TEAM_SIZE = 4
 
 
-    balanced_teams = create_balanced_teams(remaining_participants, TEAM_SIZE)
+    """balanced_teams = create_balanced_teams(remaining_participants, TEAM_SIZE)
 
-    all_groups = friend_groups + balanced_teams
+    all_groups = friend_groups + balanced_teams"""
+
+    all_groups = create_teams(participants, TEAM_SIZE)
     
     reduced_display_teams(all_groups)
 

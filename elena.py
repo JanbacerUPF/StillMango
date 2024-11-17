@@ -10,6 +10,7 @@ from participant import load_participants
 import sys
 import os
 from collections import defaultdict
+import random
 
 
 # Set the environment variable for UTF-8 support
@@ -17,51 +18,15 @@ os.environ["PYTHONIOENCODING"] = "utf-8"
 
 # Ensure stdout uses UTF-8
 sys.stdout.reconfigure(encoding="utf-8")
-
-
-"""
-# Compatibility scoring function
-def compatibility_score(participant1: Participant, participant2: Participant) -> int:
-    score = 0
-
-    # Shared languages
-    shared_languages = set(participant1.preferred_languages) & set(participant2.preferred_languages)
-    score += len(shared_languages)
-
-    # Shared interests
-    shared_interests = set(participant1.interests) & set(participant2.interests)
-    score += len(shared_interests)
-
-    # Shared skills
-    shared_skills = set(participant1.programming_skills.keys()) & set(participant2.programming_skills.keys())
-    score += sum(
-        min(participant1.programming_skills[skill], participant2.programming_skills[skill])
-        for skill in shared_skills
-    )
-
-    # Shared availability
-    shared_availability = sum(
-        participant1.availability[time] and participant2.availability[time]
-        for time in participant1.availability
-    )
-    score += shared_availability
-
-    # Objective similarity (non-empty comparison)
-    if participant1.objective and participant2.objective:
-        score += 1
-
-    return score
-
-
-# Filtering functions based on keywords (Objective, Interests, Preferred Role)
 def filter_objective(objective: str) -> str:
+    # Lowercase and remove non-alphanumeric characters for better matching
+    objective = objective.lower()
+    
     # Keywords for different objectives
     win_keywords = ['win', 'first prize', 'trophy', 'compete', 'victory']
     learn_keywords = ['learn', 'first time', 'new skills', 'develop', 'experience', 'improve']
     meet_keywords = ['meet', 'network', 'collaborate', 'make friends', 'community']
 
-    # Check for matching keywords and return the category
-    objective = objective.lower()
     if any(keyword in objective for keyword in win_keywords):
         return "prize-hunting"
     elif any(keyword in objective for keyword in learn_keywords):
@@ -70,7 +35,6 @@ def filter_objective(objective: str) -> str:
         return "meeting new people"
     else:
         return "other"
-
 
 def filter_interests(interests: List[str]) -> List[str]:
     # Keywords for common interest categories
@@ -93,53 +57,86 @@ def filter_interests(interests: List[str]) -> List[str]:
     return categorized_interests
 
 
-def filter_preferred_role(preferred_role: str) -> str:
-    # Define role categories and keywords
-    development_roles = ['development', 'developer', 'coding', 'programming']
-    design_roles = ['design', 'designer', 'UI/UX', 'graphic design']
-    analysis_roles = ['analysis', 'analyst', 'data analysis', 'data science']
-    visualization_roles = ['visualization', 'visual', 'dashboard', 'graphics']
-
-    # Match preferred roles to categories
-    if any(keyword in preferred_role.lower() for keyword in development_roles):
-        return "Development"
-    elif any(keyword in preferred_role.lower() for keyword in design_roles):
-        return "Design"
-    elif any(keyword in preferred_role.lower() for keyword in analysis_roles):
-        return "Analysis"
-    elif any(keyword in preferred_role.lower() for keyword in visualization_roles):
-        return "Visualization"
-    else:
-        return "Other"
-"""
-
-# Create balanced teams
-def create_balanced_teams(participants: List[Participant], team_size: int) -> List[List[Participant]]:
-    # Separate participants based on preferred team sizes, ensuring a group for preference 0
-    preferred_sizes = {1: [], 2: [], 3: [], 4: [], 0: []}  # Include 0 for those with no preference
-    for participant in participants:
-        preferred_sizes[participant.preferred_team_size].append(participant)
-
-    # Helper function to build teams based on preferences
-    def build_teams_from_group(preference_group: List[Participant], max_team_size: int):
-        teams = []
-        while preference_group:
-            team = []
-            for _ in range(max_team_size):
-                if preference_group:
-                    team.append(preference_group.pop())
-            teams.append(team)
-        return teams
-
-    teams = []
+#calculate compatibility score between two participants
+def calculate_compatibility(p1, p2):
+    score = 0
     
-    # First, build teams for those who prefer size 4, then 3, 2, and 1
-    for size in [4, 3, 2, 1]:
-        teams.extend(build_teams_from_group(preferred_sizes[size], size))
+    # Language Compatibility
+    if set(p1.preferred_languages).intersection(set(p2.preferred_languages)):
+        score += 1
+    
+    # Objective Compatibility
+    if p1.objective == p2.objective:
+        score += 1
+    
+    # Availability Compatibility
+    if p1.availability == p2.availability:
+        score += 1
+    
+    # Experience Level Compatibility (only for prize-hunting participants)
+    if p1.objective == "prize-hunting" and p1.experience_level == p2.experience_level:
+        score += 1
 
-    # Now, handle people with preference 0 by grouping them to maximize team preference matches
-    all_remaining = preferred_sizes[0] + preferred_sizes[1] + preferred_sizes[2] + preferred_sizes[3]
-    teams.extend(build_teams_from_group(all_remaining, 3))  # Default to 3 people for optimization
+    return score
+
+
+# Function to assign participants to teams
+def form_teams(participants: List[Participant], max_team_size: int) -> List[List[Participant]]:
+    random.shuffle(participants)  # Shuffle participants to avoid bias in order
+    teams = []
+    unassigned = participants.copy()  # Keep track of unassigned participants
+    
+    # Group participants by their preferred languages
+    language_groups = defaultdict(list)
+    for participant in participants:
+        language_groups[tuple(participant.preferred_languages)].append(participant)
+    
+    # Group participants by their filtered objectives
+    objective_groups = defaultdict(list)
+    for participant in participants:
+        objective = filter_objective(participant.objective)
+        participant.objective = objective  # Update the participant's objective with the filtered one
+        objective_groups[objective].append(participant)
+    
+    # Group participants by filtered interests
+    interest_groups = defaultdict(list)
+    for participant in participants:
+        categorized_interests = filter_interests(participant.interests)
+        participant.interests = categorized_interests  # Update the participant's interests
+        for interest in categorized_interests:
+            interest_groups[interest].append(participant)
+    
+    # Track which participants have already been assigned to a team
+    assigned_participants = set()
+    
+    # Try to form teams based on language, objective, and interest groups
+    for objective_group in objective_groups.values():
+        for interest_group in interest_groups.values():
+            # Find participants who match both objective and interest
+            combined_group = [p for p in objective_group if p in interest_group and p not in assigned_participants]
+
+            # Sort the group by their preferred team size
+            combined_group.sort(key=lambda p: p.preferred_team_size)
+            
+            # Try to form teams based on team size preference
+            while len(combined_group) >= max_team_size:
+                team = combined_group[:max_team_size]
+                teams.append(team)
+                for member in team:
+                    assigned_participants.add(member)
+                combined_group = combined_group[max_team_size:]
+            
+            # Handle smaller groups or leftover participants
+            if combined_group:
+                team = combined_group
+                teams.append(team)
+                for member in team:
+                    assigned_participants.add(member)
+    
+    # Optional: Handle the case where some participants haven't been assigned to any team
+    remaining_participants = [p for p in participants if p not in assigned_participants]
+    if remaining_participants:
+        teams.append(remaining_participants)
     
     return teams
 
@@ -253,7 +250,7 @@ if __name__ == "__main__":
     TEAM_SIZE = 4
 
 
-    balanced_teams = create_balanced_teams(remaining_participants, TEAM_SIZE)
+    balanced_teams = form_teams(remaining_participants, TEAM_SIZE)
 
     all_groups = friend_groups + balanced_teams
     

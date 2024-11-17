@@ -49,6 +49,15 @@ class Participant:
     def __hash__(self):
         # Return a hash based on the participant's unique id
         return hash(self.id)
+    
+    def experience_to_numeric(self):
+        """Convert experience level to a numeric value."""
+        experience_mapping = {
+            "Beginner": 1,
+            "Intermediate": 2,
+            "Advanced": 3
+        }
+        return experience_mapping.get(self.experience_level, 0)
 
 
 def load_participants(path: str) -> List[Participant]:
